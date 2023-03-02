@@ -52,10 +52,22 @@ class Re4dWriteMemory:
         try:
             ReadBuffer = ctypes.c_uint() # assign unsigned int buffer for reading content from lpBaseAddress
             lpBuffer = ctypes.byref(ReadBuffer) # assign pointer and point ReadBuffer
-            nSize = ctypes.sizeof(ctypes.c_uint()) # the number of bytes to be read from the process
-            #lpNumberOfBytesRead = ctypes.c_ulong(0) # A pointer to a variable that receives the number of bytes transferred into the lpBuffer.
-            Windll.kernel32.ReadProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, 0) # leave lpNumberOfBytesRead to NULL
+            nSize = ctypes.sizeof(ReadBuffer) # the number of bytes to be read from the process
+            lpNumberOfBytesRead = ctypes.c_ulong(0) # A pointer to a variable that receives the number of bytes transferred into the lpBuffer.
+            Windll.kernel32.ReadProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesRead)
+            print(self.GetLastError())
             return ReadBuffer
+        except (BufferError, ValueError, TypeError) as e: #Handlig Errors
+            self.CloseHandle(hProcess)
+            return f"{str(e)} raised on {hProcess} handle. Err Code : {self.GetLastError()}"
+
+    def WriteProcessMemory(self, hProcess, lpBaseAddress, value):
+        try:
+            WriteBuffer = ctypes.c_uint() # assign unsigned int buffer for write content to lpBaseAddress
+            lpBuffer = ctypes.byref(WriteBuffer) # assign pointer and point WriteBuffer
+            nSize = ctypes.sizeof(WriteBuffer) # the number of bytes to be write to the process
+            lpNumberOfBytesWritten = ctypes.c_ulong(0) # A pointer to a variable that receives the number of bytes transferred into the lpBuffer.
+            Windll.kernel32.WriteProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesWritten)
         except (BufferError, ValueError, TypeError) as e: #Handlig Errors
             self.CloseHandle(hProcess)
             return f"{str(e)} raised on {hProcess} handle. Err Code : {self.GetLastError()}"
@@ -76,4 +88,6 @@ if __name__ == '__main__':
     rwm = Re4dWriteMemory()
     pid = rwm.GetPidByName("Tutorial-i386.exe")
     hProcess = rwm.OpenProcess(pid)
-    print(rwm.ReadProcessMemory(hProcess, 0x00400000).value)
+    print(rwm.ReadProcessMemory(hProcess, 0x004000E))
+    rwm.WriteProcessMemory(hProcess, 0x004000E, 12)
+    print(rwm.ReadProcessMemory(hProcess, 0x004000E).value)
