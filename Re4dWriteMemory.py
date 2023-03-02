@@ -41,7 +41,6 @@ class Re4dWriteMemory:
     def OpenProcess(self, dwProcessId):
         bInheritHandle = False
         hProcess = Windll.kernel32.OpenProcess(self.PROCESS_ALL_ACCESS, bInheritHandle, dwProcessId)
-        print(hProcess)
         if hProcess:
             return hProcess
 
@@ -54,8 +53,8 @@ class Re4dWriteMemory:
             lpBuffer = ctypes.byref(ReadBuffer) # assign pointer and point ReadBuffer
             nSize = ctypes.sizeof(ReadBuffer) # the number of bytes to be read from the process
             lpNumberOfBytesRead = ctypes.c_ulong(0) # A pointer to a variable that receives the number of bytes transferred into the lpBuffer.
-            Windll.kernel32.ReadProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesRead)
-            print(self.GetLastError())
+            if not Windll.kernel32.ReadProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesRead):
+                print("Failed to Read!")
             return ReadBuffer
         except (BufferError, ValueError, TypeError) as e: #Handlig Errors
             self.CloseHandle(hProcess)
@@ -67,7 +66,9 @@ class Re4dWriteMemory:
             lpBuffer = ctypes.byref(WriteBuffer) # assign pointer and point WriteBuffer
             nSize = ctypes.sizeof(WriteBuffer) # the number of bytes to be write to the process
             lpNumberOfBytesWritten = ctypes.c_ulong(0) # A pointer to a variable that receives the number of bytes transferred into the lpBuffer.
-            Windll.kernel32.WriteProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesWritten)
+            if not Windll.kernel32.WriteProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesWritten):
+                print("Failed to Write!")
+
         except (BufferError, ValueError, TypeError) as e: #Handlig Errors
             self.CloseHandle(hProcess)
             return f"{str(e)} raised on {hProcess} handle. Err Code : {self.GetLastError()}"
@@ -88,6 +89,6 @@ if __name__ == '__main__':
     rwm = Re4dWriteMemory()
     pid = rwm.GetPidByName("Tutorial-i386.exe")
     hProcess = rwm.OpenProcess(pid)
-    print(rwm.ReadProcessMemory(hProcess, 0x004000E))
-    rwm.WriteProcessMemory(hProcess, 0x004000E, 12)
-    print(rwm.ReadProcessMemory(hProcess, 0x004000E).value)
+    rwm.ReadProcessMemory(hProcess, 0x0)
+    rwm.WriteProcessMemory(hProcess, 0x0, 1)
+    rwm.ReadProcessMemory(hProcess, 0x0).value
