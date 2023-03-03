@@ -21,27 +21,6 @@ class Re4dWriteMemory:
                 length*=2 # if pid list is small, extend Pid list
             else:
                 return None #Error
-    
-    def EnumProcessModules(self, hProcess):
-        length = 30
-        Modules = (ctypes.wintypes.DWORD*length)()
-        lphModule = ctypes.byref(Modules)
-        ModulesSize = ctypes.sizeof(Modules)
-        RcvByteSize = ctypes.wintypes.DWORD()
-        a = Windll.Psapi.EnumProcessModules(hProcess, lphModule, ModulesSize, RcvByteSize)
-        print(self.GetLastError())
-        print(RcvByteSize.value)
-        print(a)
-        if a:
-            print(RcvByteSize.value)
-            if RcvByteSize.value < ModulesSize:
-                return Modules, RcvByteSize.value
-            length *= 2
-            print(extend)
-            print(length)
-        else:
-            return None #Error
-
 
     def GetPidByName(self, pName):
         Pids, RcvByteSize = self.EnumProcesses() # Get List of Processes on System
@@ -65,20 +44,20 @@ class Re4dWriteMemory:
             return hProcess
 
     def GetPointer(self, hProcess, lpBaseAddress, offsets):
-        ptr = self.ReadProcessMemory(hProcess, lpBaseAddress)
-        print(int(str(ptr)), 0)
         length = len(offsets)
-        if offsets is None:
-            return lpBaseAddress
-        elif length == 1:
-            tmp = int(str(ptr), 0) + int(str(offsets[0]))
-            return tmp
-        for i, val in reversed(list(enumerate(offsets))):
-            tmp = int(str(ptr), 0) + int(str(val), 0)
-            ptr = self.ReadProcessMemory(hProcess, tmp)
-            if i == 1:
-                break
-        return ptr
+        if offsets is not None:
+            ptrVal = self.ReadProcessMemory(hProcess, lpBaseAddress).value #Get value that BaseAddress is pointing
+            if length == 1: # if number of offset is one
+                return ptrVal # return final value
+
+            baseaddr = ptrVal # Set base address to read new value
+            for i, val in enumerate(offsets):
+                baseaddr += val # add offset to BassAddress
+                ptrVal2 = self.ReadProcessMemory(hProcess, baseaddr).value #Get value that BaseAddress is pointing
+                if i == length-1: # if offset array is ended
+                    return baseaddr # return final value
+                baseaddr = ptrVal2 # Set base address to read new value
+        return lpBaseAddress # offsets is None, Just return it
 
     def ReadProcessMemory(self, hProcess, lpBaseAddress):
         try:
@@ -102,16 +81,9 @@ class Re4dWriteMemory:
             lpNumberOfBytesWritten = ctypes.c_ulong(0) # A pointer to a variable that receives the number of bytes transferred into the lpBuffer.
             if not Windll.kernel32.WriteProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesWritten):
                 print("Failed to Write!")
-
         except (BufferError, ValueError, TypeError) as e: #Handlig Errors
             self.CloseHandle(hProcess)
             return f"{str(e)} raised on {hProcess} handle. Err Code : {self.GetLastError()}"
-    
-    def GetModuleInfo(self, hProcess, hModule, cb):
-        lmodinfo = (ctypes.wintypes.DWORD*length)()
-        cb = ctypes.sizeof(lmodinfo)
-        print(Windll.kernel32.GetModuleInformation(hProcess, hModule, lmodinfo, cb))
-        return lmodinfo
 
     def CloseHandle(self, hProcess):
         Windll.kernel32.CloseHandle(hProcess)
@@ -124,14 +96,14 @@ class Re4dWriteMemory:
     
     def ClearLastError(self): 
         Windll.kernel32.SetLastError(0)
-    
+
 if __name__ == '__main__':
     rwm = Re4dWriteMemory()
     pid = rwm.GetPidByName("Tutorial-i386.exe")
     hProcess = rwm.OpenProcess(pid)
-    baseaddr = 0x1892EB8
-    print(rwm.EnumProcessModules(hProcess))
-    print(baseaddr)
-    print(rwm.ReadProcessMemory(hProcess, baseaddr).value)
-    rwm.WriteProcessMemory(hProcess,baseaddr, 0x64)
-    print(rwm.ReadProcessMemory(hProcess, baseaddr).value)
+    baseaddr = 0x00400000+0x0017F1E0
+    #print(hex(baseaddr))
+    print(hex(rwm.GetPointer(hProcess, baseaddr, offsets=[0x3DC, 0x540, 0x1C, 0xA0, 0xC, 0x218, 0x4B0])))
+    #print(rwm.ReadProcessMemory(hProcess, baseaddr).value)
+    #rwm.WriteProcessMemory(hProcess,baseaddr, 0x64)
+    #print(rwm.ReadProcessMemory(hProcess, baseaddr).value)
