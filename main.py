@@ -1,7 +1,7 @@
-import Re4dWriteMemory
+import PyRWM
 
 if __name__ == '__main__':
-    rwm = Re4dWriteMemory.RWM()
+    rwm = PyRWM.RWM()
     pid = rwm.GetPidByName("Tutorial-i386.exe")
     hProcess = rwm.OpenProcess(pid)
     baseaddr = 0x00400000+0x0017F1E0
