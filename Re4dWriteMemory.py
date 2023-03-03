@@ -8,24 +8,44 @@ class Re4dWriteMemory:
         #Define All access permisson
         self.PROCESS_ALL_ACCESS = 0x001F0FFF
         self.MAX_PATH = 200
-        
+
     def EnumProcesses(self):
         length = 100 # length for assign pid list
         while 1:
             Pids = (ctypes.wintypes.DWORD*length)() # assign empty pid list (DWORD 4byte * length)
             PidsSize = ctypes.sizeof(Pids) # calculate byte size of pid list
-            RByteSize = ctypes.wintypes.DWORD() # assign DWORD type space for returned byte size from Pids
-            if Windll.Psapi.EnumProcesses(ctypes.byref(Pids), PidsSize, ctypes.byref(RByteSize)):
-                if RByteSize.value < PidsSize: # if current pid list size is fine
-                    return Pids, RByteSize.value # return Pids and PidsSize
-                else:  # if pid list is small
-                    length*=2 # extend Pid list
+            RcvByteSize = ctypes.wintypes.DWORD() # assign DWORD type space for returned byte size from Pids
+            if Windll.Psapi.EnumProcesses(ctypes.byref(Pids), PidsSize, ctypes.byref(RcvByteSize)):
+                if RcvByteSize.value < PidsSize: # if current pid list size is fine
+                    return Pids, RcvByteSize.value # return Pids and PidsSize
+                length*=2 # if pid list is small, extend Pid list
             else:
                 return None #Error
+    
+    def EnumProcessModules(self, hProcess):
+        length = 30
+        Modules = (ctypes.wintypes.DWORD*length)()
+        lphModule = ctypes.byref(Modules)
+        ModulesSize = ctypes.sizeof(Modules)
+        RcvByteSize = ctypes.wintypes.DWORD()
+        a = Windll.Psapi.EnumProcessModules(hProcess, lphModule, ModulesSize, RcvByteSize)
+        print(self.GetLastError())
+        print(RcvByteSize.value)
+        print(a)
+        if a:
+            print(RcvByteSize.value)
+            if RcvByteSize.value < ModulesSize:
+                return Modules, RcvByteSize.value
+            length *= 2
+            print(extend)
+            print(length)
+        else:
+            return None #Error
+
 
     def GetPidByName(self, pName):
-        Pids, RByteSize = self.EnumProcesses() # Get List of Processes on System
-        for i in range(int(RByteSize / ctypes.sizeof(ctypes.wintypes.DWORD))): # Divide by DWORD size for Read Pid list
+        Pids, RcvByteSize = self.EnumProcesses() # Get List of Processes on System
+        for i in range(int(RcvByteSize / ctypes.sizeof(ctypes.wintypes.DWORD))): # Divide by DWORD size for Read Pid list
             Pid = Pids[i] # Read Pid list in order
             hProcess = Windll.kernel32.OpenProcess(self.PROCESS_ALL_ACCESS, False, Pid) # Get Process Handle
             if hProcess:
@@ -45,7 +65,20 @@ class Re4dWriteMemory:
             return hProcess
 
     def GetPointer(self, hProcess, lpBaseAddress, offsets):
-        pass
+        ptr = self.ReadProcessMemory(hProcess, lpBaseAddress)
+        print(int(str(ptr)), 0)
+        length = len(offsets)
+        if offsets is None:
+            return lpBaseAddress
+        elif length == 1:
+            tmp = int(str(ptr), 0) + int(str(offsets[0]))
+            return tmp
+        for i, val in reversed(list(enumerate(offsets))):
+            tmp = int(str(ptr), 0) + int(str(val), 0)
+            ptr = self.ReadProcessMemory(hProcess, tmp)
+            if i == 1:
+                break
+        return ptr
 
     def ReadProcessMemory(self, hProcess, lpBaseAddress):
         try:
@@ -62,7 +95,8 @@ class Re4dWriteMemory:
 
     def WriteProcessMemory(self, hProcess, lpBaseAddress, value):
         try:
-            WriteBuffer = ctypes.c_uint() # assign unsigned int buffer for write content to lpBaseAddress
+            WriteBuffer = ctypes.c_uint(value) # assign unsigned int buffer for write content to lpBaseAddress
+            lp = ctypes.byref(WriteBuffer)
             lpBuffer = ctypes.byref(WriteBuffer) # assign pointer and point WriteBuffer
             nSize = ctypes.sizeof(WriteBuffer) # the number of bytes to be write to the process
             lpNumberOfBytesWritten = ctypes.c_ulong(0) # A pointer to a variable that receives the number of bytes transferred into the lpBuffer.
@@ -73,13 +107,19 @@ class Re4dWriteMemory:
             self.CloseHandle(hProcess)
             return f"{str(e)} raised on {hProcess} handle. Err Code : {self.GetLastError()}"
     
+    def GetModuleInfo(self, hProcess, hModule, cb):
+        lmodinfo = (ctypes.wintypes.DWORD*length)()
+        cb = ctypes.sizeof(lmodinfo)
+        print(Windll.kernel32.GetModuleInformation(hProcess, hModule, lmodinfo, cb))
+        return lmodinfo
+
     def CloseHandle(self, hProcess):
         Windll.kernel32.CloseHandle(hProcess)
         return self.GetLastError()
     
     def GetLastError(self):
         err = Windll.kernel32.GetLastError()
-        self.ClearLastError() # Clear after get last Error
+        self.ClearLastError()
         return err
     
     def ClearLastError(self): 
@@ -89,6 +129,9 @@ if __name__ == '__main__':
     rwm = Re4dWriteMemory()
     pid = rwm.GetPidByName("Tutorial-i386.exe")
     hProcess = rwm.OpenProcess(pid)
-    rwm.ReadProcessMemory(hProcess, 0x0)
-    rwm.WriteProcessMemory(hProcess, 0x0, 1)
-    rwm.ReadProcessMemory(hProcess, 0x0).value
+    baseaddr = 0x1892EB8
+    print(rwm.EnumProcessModules(hProcess))
+    print(baseaddr)
+    print(rwm.ReadProcessMemory(hProcess, baseaddr).value)
+    rwm.WriteProcessMemory(hProcess,baseaddr, 0x64)
+    print(rwm.ReadProcessMemory(hProcess, baseaddr).value)
