@@ -10,32 +10,32 @@ class RWM:
         self.MAX_PATH = 200
 
     def EnumProcesses(self):
-        length = 100 # length for assign pid list
+        length = 100
         while 1:
-            Pids = (ctypes.wintypes.DWORD*length)() # assign empty pid list (DWORD 4byte * length)
-            PidsSize = ctypes.sizeof(Pids) # calculate byte size of pid list
-            RcvByteSize = ctypes.wintypes.DWORD() # assign DWORD type space for returned byte size from Pids
+            Pids = (ctypes.wintypes.DWORD*length)() 
+            PidsSize = ctypes.sizeof(Pids) 
+            RcvByteSize = ctypes.wintypes.DWORD() 
             if Windll.Psapi.EnumProcesses(ctypes.byref(Pids), PidsSize, ctypes.byref(RcvByteSize)):
-                if RcvByteSize.value < PidsSize: # if current pid list size is fine
-                    return Pids, RcvByteSize.value # return Pids and PidsSize
-                length*=2 # if pid list is small, extend Pid list
+                if RcvByteSize.value < PidsSize: 
+                    return Pids, RcvByteSize.value 
+                length*=2 
             else:
-                return None #Error
+                return None 
 
     def GetPidByName(self, pName):
-        Pids, RcvByteSize = self.EnumProcesses() # Get List of Processes on System
-        for i in range(int(RcvByteSize / ctypes.sizeof(ctypes.wintypes.DWORD))): # Divide by DWORD size for Read Pid list
-            Pid = Pids[i] # Read Pid list in order
-            hProcess = Windll.kernel32.OpenProcess(self.PROCESS_ALL_ACCESS, False, Pid) # Get Process Handle
+        Pids, RcvByteSize = self.EnumProcesses() 
+        for i in range(int(RcvByteSize / ctypes.sizeof(ctypes.wintypes.DWORD))): 
+            Pid = Pids[i] 
+            hProcess = Windll.kernel32.OpenProcess(self.PROCESS_ALL_ACCESS, False, Pid) 
             if hProcess:
-                ImageFileName = (ctypes.c_char*self.MAX_PATH)() # assign char type space for returned file name
-                if Windll.psapi.GetProcessImageFileNameA(hProcess, ImageFileName, self.MAX_PATH) > 0: #If function succeeds
-                    fName = os.path.basename(ImageFileName.value).decode() #Extract basename from full path 
-                    if fName == pName: #If this process is matched to pName
-                        self.CloseHandle(hProcess) #Close handle and return pid
+                ImageFileName = (ctypes.c_char*self.MAX_PATH)() 
+                if Windll.psapi.GetProcessImageFileNameA(hProcess, ImageFileName, self.MAX_PATH) > 0: 
+                    fName = os.path.basename(ImageFileName.value).decode() 
+                    if fName == pName: 
+                        self.CloseHandle(hProcess) 
                         return Pid
             self.CloseHandle(hProcess)
-        return 0 # FAILED to find process
+        return 0 
 
     def OpenProcess(self, dwProcessId):
         bInheritHandle = False
@@ -46,42 +46,42 @@ class RWM:
     def GetPointer(self, hProcess, lpBaseAddress, offsets):
         length = len(offsets)
         if offsets is not None:
-            ptrVal = self.ReadProcessMemory(hProcess, lpBaseAddress).value #Get value that BaseAddress is pointing
-            if length == 1: # if number of offset is one
-                return ptrVal # return final value
+            ptrVal = self.ReadProcessMemory(hProcess, lpBaseAddress).value 
+            if length == 1: 
+                return ptrVal 
 
-            baseaddr = ptrVal # Set base address to read new value
+            baseaddr = ptrVal 
             for i, val in enumerate(offsets):
-                baseaddr += val # add offset to BassAddress
-                ptrVal2 = self.ReadProcessMemory(hProcess, baseaddr).value #Get value that BaseAddress is pointing
-                if i == length-1: # if offset array is ended
-                    return baseaddr # return final value
-                baseaddr = ptrVal2 # Set base address to read new value
-        return lpBaseAddress # offsets is None, Just return it
+                baseaddr += val 
+                ptrVal2 = self.ReadProcessMemory(hProcess, baseaddr).value 
+                if i == length-1: 
+                    return baseaddr 
+                baseaddr = ptrVal2 
+        return lpBaseAddress 
 
     def ReadProcessMemory(self, hProcess, lpBaseAddress):
         try:
-            ReadBuffer = ctypes.c_uint() # assign unsigned int buffer for reading content from lpBaseAddress
-            lpBuffer = ctypes.byref(ReadBuffer) # assign pointer and point ReadBuffer
-            nSize = ctypes.sizeof(ReadBuffer) # the number of bytes to be read from the process
-            lpNumberOfBytesRead = ctypes.c_ulong(0) # A pointer to a variable that receives the number of bytes transferred into the lpBuffer.
+            ReadBuffer = ctypes.c_uint() 
+            lpBuffer = ctypes.byref(ReadBuffer) 
+            nSize = ctypes.sizeof(ReadBuffer) 
+            lpNumberOfBytesRead = ctypes.c_ulong(0) 
             if not Windll.kernel32.ReadProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesRead):
                 print("Failed to Read!")
             return ReadBuffer
-        except (BufferError, ValueError, TypeError) as e: #Handlig Errors
+        except (BufferError, ValueError, TypeError) as e: 
             self.CloseHandle(hProcess)
             return f"{str(e)} raised on {hProcess} handle. Err Code : {self.GetLastError()}"
 
     def WriteProcessMemory(self, hProcess, lpBaseAddress, value):
         try:
-            WriteBuffer = ctypes.c_uint(value) # assign unsigned int buffer for write content to lpBaseAddress
+            WriteBuffer = ctypes.c_uint(value) 
             lp = ctypes.byref(WriteBuffer)
-            lpBuffer = ctypes.byref(WriteBuffer) # assign pointer and point WriteBuffer
-            nSize = ctypes.sizeof(WriteBuffer) # the number of bytes to be write to the process
-            lpNumberOfBytesWritten = ctypes.c_ulong(0) # A pointer to a variable that receives the number of bytes transferred into the lpBuffer.
+            lpBuffer = ctypes.byref(WriteBuffer) 
+            nSize = ctypes.sizeof(WriteBuffer) 
+            lpNumberOfBytesWritten = ctypes.c_ulong(0) 
             if not Windll.kernel32.WriteProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesWritten):
                 print("Failed to Write!")
-        except (BufferError, ValueError, TypeError) as e: #Handlig Errors
+        except (BufferError, ValueError, TypeError) as e: 
             self.CloseHandle(hProcess)
             return f"{str(e)} raised on {hProcess} handle. Err Code : {self.GetLastError()}"
 
