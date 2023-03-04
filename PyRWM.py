@@ -65,12 +65,29 @@ class RWM:
         lpBuffer = ctypes.byref(ReadBuffer)
         nSize = ctypes.sizeof(ReadBuffer)
         print(lpBaseAddress)
+        print(signature)
         if not Windll.kernel32.ReadProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, None):
             return self.GetLastError()
+        for idx, val in enumerate(ReadBuffer):
+            print(hex(val & 0xff), end=f"-{hex(lpBaseAddress+idx)}, ")
+
         for offset, val in enumerate(ReadBuffer):
-            print(hex(lpBaseAddress+offset))
-            print(hex(val & 0xff))
-        
+            succ = True
+            area = lpBaseAddress+offset
+            print(f"Area : {hex(lpBaseAddress+offset)}")
+            print(f"val : {hex(val & 0xff)}")
+            for i, v in enumerate(ReadBuffer[offset:]):
+                print(f"sig idx : {i} ,{hex(signature[i])} vs {hex(v & 0xff)}")
+                if signature[i] != -1 and hex(signature[i]) != hex(v & 0xff):
+                    succ = False
+                    print("imma out")
+                    break
+                if i == len(signature)-1:
+                    print("we did it!")
+                    return hex(area)
+                else:
+                    print("nah")
+
     def ReadProcessMemory(self, hProcess, lpBaseAddress):
         try:
             ReadBuffer = ctypes.c_uint() 
