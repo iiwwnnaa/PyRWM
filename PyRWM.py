@@ -1,6 +1,6 @@
-import ctypes, os
+import ctypes, os, numpy
 import ctypes.wintypes
-import numpy as np
+
 Windll = ctypes.windll
 
 class RWM:
@@ -49,7 +49,6 @@ class RWM:
             ptrVal = self.ReadProcessMemory(hProcess, lpBaseAddress).value 
             if length == 1: 
                 return ptrVal 
-
             baseaddr = ptrVal 
             for i, val in enumerate(offsets):
                 baseaddr += val 
@@ -58,24 +57,31 @@ class RWM:
                     return baseaddr 
                 baseaddr = ptrVal2 
         return lpBaseAddress
-    
-    def GetAddressFromSignature(self, hProcess, lpBaseAddress, signature):
-        length = 100000
-        ReadBuffer = (ctypes.wintypes.BYTE*length)()
-        lpBuffer = ctypes.byref(ReadBuffer)
-        nSize = ctypes.sizeof(ReadBuffer)
-        if not Windll.kernel32.ReadProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, None):
-            return self.GetLastError()
-        print(len(ReadBuffer))
-        ReadBuffer = np.array(ReadBuffer)
-        for offset, val in enumerate(ReadBuffer):
-            print(offset)
-            addr = lpBaseAddress+offset
-            for i, v in enumerate(ReadBuffer[offset:]):
-                if signature[i] != -1 and signature[i] != (v & 0xff):
-                    break
-                if i == len(signature)-1:
-                    return hex(addr)
+
+    def GetAddressFromSignature(self, hProcess, signature, startAddr=0x00400000, endAddr=0xFFFFFFFF): #for Win32 Process
+        tmp = []
+        for i in signature.split(" "):
+            if i == "??":
+                tmp.append(-1)
+            else:
+                tmp.append(int(i, 16))
+        signature = numpy.array(tmp)
+        length = endAddr - startAddr
+        if length > 0x20000000: #if length is bigger than 512MB
+            length = 0x20000000
+        for addr in range(startAddr, endAddr+1, length):
+            ReadBuffer = (ctypes.wintypes.BYTE*length)()
+            lpBuffer = ctypes.byref(ReadBuffer)
+            nSize = ctypes.sizeof(ReadBuffer) 
+            Windll.kernel32.ReadProcessMemory(hProcess, addr, lpBuffer, nSize, None) # Error 299 is fine.
+            ReadBuffer = numpy.array(ReadBuffer)
+            for offset, val in enumerate(ReadBuffer):
+                addr2 = addr+offset
+                for i, v in enumerate(ReadBuffer[offset:]):
+                    if signature[i] != -1 and signature[i] != (v & 0xff):
+                        break
+                    if i == len(signature)-1:
+                        return addr2
 
     def ReadProcessMemory(self, hProcess, lpBaseAddress):
         try:
