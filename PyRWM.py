@@ -1,21 +1,46 @@
-import ctypes, os, numpy
-import ctypes.wintypes
+import os, numpy
+from ctypes import *
+from ctypes.wintypes import *
 
-Windll = ctypes.windll
+win_Module32First = windll.kernel32.Module32First
+win_Module32Next = windll.kernel32.Module32Next
+win_OpenProcess = windll.kernel32.OpenProcess
+win_GetProcessImageFileNameA = windll.psapi.GetProcessImageFileNameA
+win_CreateToolhelp32Snapshot = windll.kernel32.CreateToolhelp32Snapshot
+win_EnumProcesses = windll.Psapi.EnumProcesses
+win_ReadProcessMemory = windll.kernel32.ReadProcessMemory
+win_WriteProcessMemory = windll.kernel32.WriteProcessMemory
+win_GetLastError = windll.kernel32.GetLastError
+win_SetLastError = windll.kernel32.SetLastError
+win_CloseHandle = windll.kernel32.CloseHandle 
+
+class MODULEENTRY32(Structure):
+    _fields_ = [
+    ( 'dwSize' , DWORD),
+    ( 'th32ModuleID' , DWORD),
+    ( 'th32ProcessID' , DWORD),
+    ( 'GlblcntUsage' , DWORD),
+    ( 'ProccntUsage' , DWORD),
+    ( 'modBaseAddr' , POINTER(BYTE)),
+    ( 'modBaseSize' , DWORD),
+    ( 'hModule' , HMODULE),
+    ( 'szModule' , c_char * 256),
+    ( 'szExePath' , c_char * 260) ]
 
 class RWM:
     def __init__(self):
         #Define All access permisson
         self.PROCESS_ALL_ACCESS = 0x001F0FFF
+        self.TH32CS_SNAPMODULE = 0x00000008
         self.MAX_PATH = 200
-
+    
     def EnumProcesses(self):
         length = 100
         while 1:
-            Pids = (ctypes.wintypes.DWORD*length)() 
-            PidsSize = ctypes.sizeof(Pids) 
-            RcvByteSize = ctypes.wintypes.DWORD() 
-            if Windll.Psapi.EnumProcesses(ctypes.byref(Pids), PidsSize, ctypes.byref(RcvByteSize)):
+            Pids = (DWORD*length)() 
+            PidsSize = sizeof(Pids) 
+            RcvByteSize = DWORD() 
+            if win_EnumProcesses(byref(Pids), PidsSize, byref(RcvByteSize)):
                 if RcvByteSize.value < PidsSize: 
                     return Pids, RcvByteSize.value 
                 length*=2 
@@ -24,12 +49,12 @@ class RWM:
 
     def GetPidByName(self, pName):
         Pids, RcvByteSize = self.EnumProcesses() 
-        for i in range(int(RcvByteSize / ctypes.sizeof(ctypes.wintypes.DWORD))): 
+        for i in range(int(RcvByteSize / sizeof(DWORD))): 
             Pid = Pids[i] 
-            hProcess = Windll.kernel32.OpenProcess(self.PROCESS_ALL_ACCESS, False, Pid) 
+            hProcess = win_OpenProcess(self.PROCESS_ALL_ACCESS, False, Pid) 
             if hProcess:
-                ImageFileName = (ctypes.c_char*self.MAX_PATH)() 
-                if Windll.psapi.GetProcessImageFileNameA(hProcess, ImageFileName, self.MAX_PATH) > 0: 
+                ImageFileName = (c_char*self.MAX_PATH)() 
+                if win_GetProcessImageFileNameA(hProcess, ImageFileName, self.MAX_PATH) > 0: 
                     fName = os.path.basename(ImageFileName.value).decode() 
                     if fName == pName: 
                         self.CloseHandle(hProcess) 
@@ -39,9 +64,30 @@ class RWM:
 
     def OpenProcess(self, dwProcessId):
         bInheritHandle = False
-        hProcess = Windll.kernel32.OpenProcess(self.PROCESS_ALL_ACCESS, bInheritHandle, dwProcessId)
+        hProcess = win_OpenProcess(self.PROCESS_ALL_ACCESS, bInheritHandle, dwProcessId)
         if hProcess:
             return hProcess
+
+    def GetModule(self, Pid, pName):
+        me32 = MODULEENTRY32()
+        me32.dwSize = sizeof( MODULEENTRY32 )
+        hModuleSnap = c_void_p(0)
+        hModuleSnap = win_CreateToolhelp32Snapshot(self.TH32CS_SNAPMODULE, Pid)
+        if win_Module32First(hModuleSnap, byref(me32)):
+            if me32.szModule.decode() == pName:
+                print(hex(ctypes.addressof(me32.modBaseAddr.contents)))
+                print(hex(me32.dwSize))
+                self.CloseHandle(hModuleSnap)
+                return id(me32.modBaseAddr)
+            else:
+                win_Module32Next(hModuleSnap, byref(me32))
+                while int(GetLastError()) != 18: #ERROR_NO_MORE_FILES
+                    if me32.szModule.decode() == pName:
+                        self.CloseHandle(hModuleSnap)
+                        return id(me32.modBaseAddr)
+                    win_Module32Next(hModuleSnap, byref(me32))
+        self.CloseHandle(hModuleSnap)
+
 
     def GetPointer(self, hProcess, lpBaseAddress, offsets):
         length = len(offsets)
@@ -70,10 +116,10 @@ class RWM:
         if length > 0x20000000: #if length is bigger than 512MB
             length = 0x20000000
         for addr in range(startAddr, endAddr+1, length):
-            ReadBuffer = (ctypes.wintypes.BYTE*length)()
-            lpBuffer = ctypes.byref(ReadBuffer)
-            nSize = ctypes.sizeof(ReadBuffer) 
-            Windll.kernel32.ReadProcessMemory(hProcess, addr, lpBuffer, nSize, None) # Error 299 is fine.
+            ReadBuffer = (BYTE*length)()
+            lpBuffer = byref(ReadBuffer)
+            nSize = sizeof(ReadBuffer) 
+            win_ReadProcessMemory(hProcess, addr, lpBuffer, nSize, None) # Error 299 is fine.
             ReadBuffer = numpy.array(ReadBuffer)
             for offset, val in enumerate(ReadBuffer):
                 addr2 = addr+offset
@@ -85,11 +131,11 @@ class RWM:
 
     def ReadProcessMemory(self, hProcess, lpBaseAddress):
         try:
-            ReadBuffer = ctypes.c_uint() 
-            lpBuffer = ctypes.byref(ReadBuffer) 
-            nSize = ctypes.sizeof(ReadBuffer) 
-            lpNumberOfBytesRead = ctypes.c_ulong(0) 
-            if not Windll.kernel32.ReadProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesRead):
+            ReadBuffer = c_uint() 
+            lpBuffer = byref(ReadBuffer) 
+            nSize = sizeof(ReadBuffer) 
+            lpNumberOfBytesRead = c_ulong(0) 
+            if not win_ReadProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesRead):
                 print("Failed to Read!")
             return ReadBuffer
         except (BufferError, ValueError, TypeError) as e: 
@@ -98,25 +144,25 @@ class RWM:
 
     def WriteProcessMemory(self, hProcess, lpBaseAddress, value):
         try:
-            WriteBuffer = ctypes.c_uint(value) 
-            lp = ctypes.byref(WriteBuffer)
-            lpBuffer = ctypes.byref(WriteBuffer) 
-            nSize = ctypes.sizeof(WriteBuffer) 
-            lpNumberOfBytesWritten = ctypes.c_ulong(0) 
-            if not Windll.kernel32.WriteProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesWritten):
+            WriteBuffer = c_uint(value) 
+            lp = byref(WriteBuffer)
+            lpBuffer = byref(WriteBuffer) 
+            nSize = sizeof(WriteBuffer) 
+            lpNumberOfBytesWritten = c_ulong(0) 
+            if not win_WriteProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesWritten):
                 print("Failed to Write!")
         except (BufferError, ValueError, TypeError) as e: 
             self.CloseHandle(hProcess)
             return f"{str(e)} raised on {hProcess} handle. Err Code : {self.GetLastError()}"
 
     def CloseHandle(self, hProcess):
-        Windll.kernel32.CloseHandle(hProcess)
+        win_CloseHandle(hProcess)
         return self.GetLastError()
     
     def GetLastError(self):
-        err = Windll.kernel32.GetLastError()
+        err = win_GetLastError()
         self.ClearLastError()
         return err
     
     def ClearLastError(self): 
-        Windll.kernel32.SetLastError(0)
+        win_SetLastError(0)
