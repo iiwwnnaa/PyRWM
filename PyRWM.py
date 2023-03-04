@@ -1,6 +1,6 @@
 import ctypes, os
 import ctypes.wintypes
-
+import numpy as np
 Windll = ctypes.windll
 
 class RWM:
@@ -60,33 +60,22 @@ class RWM:
         return lpBaseAddress
     
     def GetAddressFromSignature(self, hProcess, lpBaseAddress, signature):
-        length = 128
+        length = 100000
         ReadBuffer = (ctypes.wintypes.BYTE*length)()
         lpBuffer = ctypes.byref(ReadBuffer)
         nSize = ctypes.sizeof(ReadBuffer)
-        print(lpBaseAddress)
-        print(signature)
         if not Windll.kernel32.ReadProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, None):
             return self.GetLastError()
-        for idx, val in enumerate(ReadBuffer):
-            print(hex(val & 0xff), end=f"-{hex(lpBaseAddress+idx)}, ")
-
+        print(len(ReadBuffer))
+        ReadBuffer = np.array(ReadBuffer)
         for offset, val in enumerate(ReadBuffer):
-            succ = True
-            area = lpBaseAddress+offset
-            print(f"Area : {hex(lpBaseAddress+offset)}")
-            print(f"val : {hex(val & 0xff)}")
+            print(offset)
+            addr = lpBaseAddress+offset
             for i, v in enumerate(ReadBuffer[offset:]):
-                print(f"sig idx : {i} ,{hex(signature[i])} vs {hex(v & 0xff)}")
-                if signature[i] != -1 and hex(signature[i]) != hex(v & 0xff):
-                    succ = False
-                    print("imma out")
+                if signature[i] != -1 and signature[i] != (v & 0xff):
                     break
                 if i == len(signature)-1:
-                    print("we did it!")
-                    return hex(area)
-                else:
-                    print("nah")
+                    return hex(addr)
 
     def ReadProcessMemory(self, hProcess, lpBaseAddress):
         try:
