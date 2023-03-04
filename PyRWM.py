@@ -57,8 +57,20 @@ class RWM:
                 if i == length-1: 
                     return baseaddr 
                 baseaddr = ptrVal2 
-        return lpBaseAddress 
-
+        return lpBaseAddress
+    
+    def GetAddressFromSignature(self, hProcess, lpBaseAddress, signature):
+        length = 128
+        ReadBuffer = (ctypes.wintypes.BYTE*length)()
+        lpBuffer = ctypes.byref(ReadBuffer)
+        nSize = ctypes.sizeof(ReadBuffer)
+        print(lpBaseAddress)
+        if not Windll.kernel32.ReadProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, None):
+            return self.GetLastError()
+        for offset, val in enumerate(ReadBuffer):
+            print(hex(lpBaseAddress+offset))
+            print(hex(val & 0xff))
+        
     def ReadProcessMemory(self, hProcess, lpBaseAddress):
         try:
             ReadBuffer = ctypes.c_uint() 
