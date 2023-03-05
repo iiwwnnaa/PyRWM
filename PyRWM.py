@@ -56,11 +56,11 @@ class RWM:
                 ImageFileName = (c_char*self.MAX_PATH)() 
                 if win_GetProcessImageFileNameA(hProcess, ImageFileName, self.MAX_PATH) > 0: 
                     fName = os.path.basename(ImageFileName.value).decode() 
-                    if fName == pName: 
+                    if fName == pName:
                         self.CloseHandle(hProcess) 
                         return Pid
             self.CloseHandle(hProcess)
-        return 0 
+        return 0 #Failed to get PID
 
     def OpenProcess(self, dwProcessId):
         bInheritHandle = False
@@ -75,19 +75,16 @@ class RWM:
         hModuleSnap = win_CreateToolhelp32Snapshot(self.TH32CS_SNAPMODULE, Pid)
         if win_Module32First(hModuleSnap, byref(me32)):
             if me32.szModule.decode() == pName:
-                print(hex(ctypes.addressof(me32.modBaseAddr.contents)))
-                print(hex(me32.dwSize))
                 self.CloseHandle(hModuleSnap)
-                return id(me32.modBaseAddr)
+                return me32
             else:
                 win_Module32Next(hModuleSnap, byref(me32))
                 while int(GetLastError()) != 18: #ERROR_NO_MORE_FILES
                     if me32.szModule.decode() == pName:
                         self.CloseHandle(hModuleSnap)
-                        return id(me32.modBaseAddr)
+                        return me32
                     win_Module32Next(hModuleSnap, byref(me32))
         self.CloseHandle(hModuleSnap)
-
 
     def GetPointer(self, hProcess, lpBaseAddress, offsets):
         length = len(offsets)
@@ -118,8 +115,8 @@ class RWM:
         for addr in range(startAddr, endAddr+1, length):
             ReadBuffer = (BYTE*length)()
             lpBuffer = byref(ReadBuffer)
-            nSize = sizeof(ReadBuffer) 
-            win_ReadProcessMemory(hProcess, addr, lpBuffer, nSize, None) # Error 299 is fine.
+            nSize = sizeof(ReadBuffer)
+            win_ReadProcessMemory(hProcess, c_void_p(addr) , lpBuffer, nSize, None) # Error 299 is fine.
             ReadBuffer = numpy.array(ReadBuffer)
             for offset, val in enumerate(ReadBuffer):
                 addr2 = addr+offset
@@ -134,8 +131,7 @@ class RWM:
             ReadBuffer = c_uint() 
             lpBuffer = byref(ReadBuffer) 
             nSize = sizeof(ReadBuffer) 
-            lpNumberOfBytesRead = c_ulong(0) 
-            if not win_ReadProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesRead):
+            if not win_ReadProcessMemory(hProcess, c_void_p(lpBaseAddress), lpBuffer, nSize, None):
                 print("Failed to Read!")
             return ReadBuffer
         except (BufferError, ValueError, TypeError) as e: 
@@ -148,8 +144,7 @@ class RWM:
             lp = byref(WriteBuffer)
             lpBuffer = byref(WriteBuffer) 
             nSize = sizeof(WriteBuffer) 
-            lpNumberOfBytesWritten = c_ulong(0) 
-            if not win_WriteProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesWritten):
+            if not win_WriteProcessMemory(hProcess, c_void_p(lpBaseAddress), lpBuffer, nSize, None):
                 print("Failed to Write!")
         except (BufferError, ValueError, TypeError) as e: 
             self.CloseHandle(hProcess)
